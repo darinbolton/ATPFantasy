@@ -1,0 +1,50 @@
+#Iterate over each match and update the players' Map_Wins and Point_Total
+<#foreach ($match in $matches) {
+    $player1Name = $match."Player 1"
+    $player1Score = [int]$match."Player 1 Score"
+    $player2Name = $match."Player 2"
+    $player2Score = [int]$match."Player 2 Score"
+    
+    # Update Player 1
+    $player1 = $players | Where-Object { $_.Name -eq $player1Name }
+    if ($player1) {
+        $player1.Map_Wins = [int]$player1.Map_Wins + $player1Score
+        $player1.Point_Total = ($player1.Map_Wins * 10) * [double]$player1.Multiplier
+    }
+    
+    # Update Player 2
+    $player2 = $players | Where-Object { $_.Name -eq $player2Name }
+    if ($player2) {
+        $player2.Map_Wins = [int]$player2.Map_Wins + $player2Score
+        $player2.Point_Total = ($player2.Map_Wins * 10) * [double]$player2.Multiplier
+    }
+}
+#>
+
+<#Invoke-Sqlcmd -ServerInstance "WINDOWSSERVER\SQLEXPRESS" -Database 'ATPFantasy' -Encrypt Optional -Query @"
+IF EXISTS (SELECT 1 FROM INFORMATION_SCHEMA.TABLES WHERE TABLE_NAME = 'ATPS3_Players_Staging')
+    DROP TABLE ATPS3_Players_Staging;
+
+CREATE TABLE ATPS3_Players_Staging (
+    Team VARCHAR(255),
+    Name VARCHAR(255),
+    Pool INT,
+    Multiplier FLOAT,
+    Map_Wins INT,
+    Map_Losses INT,
+    Point_Total INT
+);
+
+BULK INSERT ATPS3_Players_Staging
+FROM 'C:\Programs\ATPFantasy\ATPS3_Players_Staging.csv'
+WITH (
+    FORMAT = 'CSV',
+    FIELDTERMINATOR = ',',
+    FIELDQUOTE = '"',
+    ROWTERMINATOR = '\n',
+    FIRSTROW = 2
+);
+"@
+
+#>
+
