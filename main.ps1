@@ -195,11 +195,36 @@ SELECT TOP (1000) [DiscordName]
 $fantasyLeaderboardSorted = $fantasyLeaderboard | Select-Object -Property DiscordName,Total_Points |  Sort-Object -Property @{Expression = "Total_Points"; Descending = $true}
 
 # Discord webhook uri's
-#$webhookURL = Get-Content ..\webhookURL.txt
-$webhookURL = "https://discord.com/api/webhooks/1163881495958663249/Ne_on6tWF1pJEfYX9-rG-tCj4l9rWqSO8b2ussiaxGCvzOLNDvQcHGjGgZT7Znn2UKqO"
+$webhookURL = Get-Content ../ATPWebhook_Gale.txt
+#$webhookURL = "https://discord.com/api/webhooks/1163881495958663249/Ne_on6tWF1pJEfYX9-rG-tCj4l9rWqSO8b2ussiaxGCvzOLNDvQcHGjGgZT7Znn2UKqO"
 
 # 36 was the maximum amount of rows I could include. 
 $leaderboard = $fantasyLeaderboardSorted[0..36]
+
+$combinedArray = @()
+
+# Determine the maximum length of the arrays
+$maxLength = [math]::Max($playerRankingsSorted.Count, $fantasyLeaderboardSorted.Count)
+
+# Loop through each rank position
+for ($i = 0; $i -lt $maxLength; $i++) {
+    $player = if ($i -lt $playerRankingsSorted.Count) { $playerRankingsSorted[$i] } else { @{} }
+    $fantasy = if ($i -lt $fantasyLeaderboardSorted.Count) { $fantasyLeaderboardSorted[$i] } else { @{} }
+
+    $combinedArray += [pscustomobject]@{
+        Rank = $i + 1
+        ATP_Player = if ($player.Name) { $player.Name } else { $null }
+        PointValue = if ($player.Point_Total) { $player.Point_Total } else { $null }
+        Fantasy_Rank = $i + 1
+        FantasyPlayer = if ($fantasy.DiscordName) { $fantasy.DiscordName } else { $null }
+        Total_Fantasy_Points = if ($fantasy.Total_Points) { $fantasy.Total_Points } else { $null }
+    }
+}
+
+# Output the combined array
+$combinedArray | Format-Table -AutoSize
+
+$leaderboard = $combinedArray[0..19]
 
 # Create embed array
 [System.Collections.ArrayList]$embedArray = @()
@@ -212,7 +237,7 @@ $description = "The AllThingsProtoss Team League is a Draft Team League organize
 $csvDescription = '`' + ($leaderboard | Format-Table | Out-String)+'`'
 
 # Create thumbnail object
-$thumbUrl = 'https://i.imgur.com/XPghlWq.png'
+$thumbUrl = 'https://b.thumbs.redditmedia.com/7wJTJioM9e_s2Pf980yL7l8AsP-eYGxtM_0nTVX8luU.png'
 $thumbnailObject = [PSCustomObject]@{
     url = $thumbUrl
 }
