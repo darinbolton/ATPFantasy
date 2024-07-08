@@ -116,18 +116,96 @@ $date = Get-Date -Format "MM-dd-yyyy"
 $day = Get-Date -Format "dddd MM/dd/yyyy HH:mm"
 $prettyday = Get-Date -Format "MM/dd"
 
+
+
+# Define the query to get all rows from ATPS3_FantasyPicks
+$getFantasyPicksQuery = @"
+SELECT DiscordName, WinningTeam, CaptainPool, Pool1, Pool2, Pool3, Pool4
+FROM ATPS3_FantasyPicks
+"@
+
+# Get the fantasy picks data
+$fantasyPicks = Invoke-Sqlcmd -ServerInstance "WINDOWSSERVER\SQLEXPRESS" -Database 'ATPFantasy' -Encrypt Optional -Query $getFantasyPicksQuery
+
+# Debug: Output retrieved fantasy picks data
+Write-Output "Retrieved Fantasy Picks Data:"
+$fantasyPicks | ForEach-Object { Write-Output "DiscordName: $_.DiscordName, CaptainPool: $_.CaptainPool, Pool1: $_.Pool1, Pool2: $_.Pool2, Pool3: $_.Pool3, Pool4: $_.Pool4" }
+
+# Retrieve ATPS3_Players data
+$getPlayersQuery = @"
+SELECT Name, Point_Total
+FROM ATPS3_Players
+"@
+
+$playersData = Invoke-Sqlcmd -ServerInstance "WINDOWSSERVER\SQLEXPRESS" -Database 'ATPFantasy' -Encrypt Optional -Query $getPlayersQuery
+
+# Create a hash table to store players' points
+$playersPoints = @{}
+
+foreach ($player in $playersData) {
+    $playersPoints[$player.Name.Trim().ToLower()] = $player.Point_Total
+}
+
+# Debug: Output hash table
+Write-Output "Players Points Hash Table:"
+$playersPoints.GetEnumerator() | ForEach-Object { Write-Output "Name: $($_.Key), Point_Total: $($_.Value)" }
+
+# Loop through each row in the fantasy picks data
+foreach ($pick in $fantasyPicks) {
+    $totalPoints = 0
+
+    # Define player names from each pool
+    $players = @($pick.CaptainPool, $pick.Pool1, $pick.Pool2, $pick.Pool3, $pick.Pool4)
+
+    # Loop through each player and get their Point_Total from the hash table
+    foreach ($player in $players) {
+        $playerKey = $player.Trim().ToLower()
+        if ($playerKey -and $playersPoints.ContainsKey($playerKey)) {
+            $totalPoints += $playersPoints[$playerKey]
+            # Debug: Output points being added
+            Write-Output "Adding points for player: $player, Points: $playersPoints[$playerKey]"
+        } else {
+            # Debug: Output missing player or player with no points
+            Write-Output "Player not found or has no points: $player"
+        }
+    }
+
+    # Debug: Output calculated total points
+    Write-Output "DiscordName: $($pick.DiscordName), Total_Points: $totalPoints"
+
+    # Update the Total_Points column in ATPS3_FantasyPicks
+    $updateTotalPointsQuery = @"
+UPDATE ATPS3_FantasyPicks
+SET Total_Points = $totalPoints
+WHERE DiscordName = '$($pick.DiscordName)'
+"@
+
+    # Execute the update query
+    Invoke-Sqlcmd -ServerInstance "WINDOWSSERVER\SQLEXPRESS" -Database 'ATPFantasy' -Encrypt Optional -Query $updateTotalPointsQuery
+}
+
+Write-Output "Total points updated successfully."
+
+$fantasyLeaderboard = Invoke-Sqlcmd -ServerInstance "WINDOWSSERVER\SQLEXPRESS" -Database 'ATPFantasy' -Encrypt Optional -Query @"
+SELECT TOP (1000) [DiscordName]
+      ,[Total_Points]
+  FROM [ATPFantasy].[dbo].[ATPS3_FantasyPicks]
+"@
+
+$fantasyLeaderboardSorted = $fantasyLeaderboard | Select-Object -Property DiscordName,Total_Points |  Sort-Object -Property @{Expression = "Total_Points"; Descending = $true}
+
 # Discord webhook uri's
 #$webhookURL = Get-Content ..\webhookURL.txt
 $webhookURL = "https://discord.com/api/webhooks/1163881495958663249/Ne_on6tWF1pJEfYX9-rG-tCj4l9rWqSO8b2ussiaxGCvzOLNDvQcHGjGgZT7Znn2UKqO"
 
 # 36 was the maximum amount of rows I could include. 
-$leaderboard = $playerRankingsSorted[0..36]
+$leaderboard = $fantasyLeaderboardSorted[0..36]
 
 # Create embed array
 [System.Collections.ArrayList]$embedArray = @()
 
 # Store embed values
-$title       = "AllThingsProtoss Team League - Fantasy"
+$title       = "AllThingsProtoss Team League - Fantasy Values"
 $description = "The AllThingsProtoss Team League is a Draft Team League organized and sponsored by Gemini with additional prize pool contributions from Esarel, NeWHoriZonS, Dyncommon, LeWaffles, Ardent, Frogos, Xin and danimal for the r/AllThingsProtoss Discord community. To view upcoming matches and results, visit the Liquipedia: https://liquipedia.net/starcraft2/AllThingsProtoss/Team_League/3."
 
 # Format the CSV data as a table in a code block
